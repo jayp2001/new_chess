@@ -1,36 +1,190 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Chess MCQ - Chess Platform
+
+A chess platform built with Next.js, Supabase, shadcn/ui, and Tailwind CSS.
+
+## Features
+
+- 🎨 Modern UI with shadcn/ui and Tailwind CSS
+- 🔐 Authentication with Supabase
+- ♟️ Reusable Chess Components:
+  - **ChessBoard**: Interactive chess board using react-chessboard
+  - **ChessEngine**: Stockfish integration for computer opponents
+  - **ChessRules**: Chess.js integration for game rules and validation
+
+## Design System
+
+This project uses **shadcn/ui** and **Tailwind CSS** as the design system. All components follow the design system principles:
+- Consistent styling with Tailwind utility classes
+- shadcn/ui components for UI elements
+- Dark mode support
+- Responsive design
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
 
+- Node.js 18+ and npm
+- Supabase account and project
+
+### Installation
+
+1. Clone the repository:
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone <repository-url>
+cd chess_mcq
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. Install dependencies:
+```bash
+npm install
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+3. Set up environment variables:
+Create a `.env.local` file in the root directory:
+```env
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+4. Run the development server:
+```bash
+npm run dev
+```
 
-## Learn More
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-To learn more about Next.js, take a look at the following resources:
+## Chess Components
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### ChessBoard Component
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+A reusable chess board component built with react-chessboard.
 
-## Deploy on Vercel
+```tsx
+import { ChessBoard } from '@/components/chess'
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+<ChessBoard
+  position="rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+  boardOrientation="white"
+  onMove={(from, to) => {
+    console.log(`Move from ${from} to ${to}`)
+    return true // Return false to prevent the move
+  }}
+  arePiecesDraggable={true}
+  showBoardNotation={true}
+/>
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### ChessEngine Hook
+
+Integrate Stockfish chess engine for computer opponents.
+
+```tsx
+import { useChessEngine } from '@/components/chess'
+import { Chess } from 'chess.js'
+
+function MyComponent() {
+  const game = new Chess()
+  
+  const { calculateBestMove, isThinking, evaluation } = useChessEngine({
+    game,
+    depth: 15,
+    timeLimit: 2000, // milliseconds
+    onBestMove: (move) => {
+      console.log('Best move:', move)
+      // Apply the move to your game
+    },
+    onEvaluation: (score) => {
+      console.log('Position evaluation:', score)
+    },
+    enabled: true,
+  })
+
+  // Calculate best move
+  calculateBestMove(game.fen())
+  
+  return (
+    <div>
+      {isThinking && <p>Engine is thinking...</p>}
+      {evaluation && <p>Evaluation: {evaluation.score}</p>}
+    </div>
+  )
+}
+```
+
+### ChessRules Class
+
+Comprehensive chess rules and validation using chess.js.
+
+```tsx
+import { ChessRules } from '@/components/chess'
+
+const rules = new ChessRules()
+
+// Check if a move is valid
+const isValid = rules.isValidMove('e2', 'e4')
+
+// Make a move
+try {
+  const move = rules.makeMove('e2', 'e4')
+  console.log('Move made:', move)
+} catch (error) {
+  console.error('Invalid move:', error)
+}
+
+// Get game state
+const gameState = rules.getGameState()
+console.log('Is check:', gameState.isCheck)
+console.log('Is checkmate:', gameState.isCheckmate)
+
+// Get all valid moves
+const validMoves = rules.getAllValidMoves()
+
+// Or use the hook
+import { useChessRules } from '@/components/chess'
+
+function MyComponent() {
+  const rules = useChessRules()
+  // Use rules as above
+}
+```
+
+## Project Structure
+
+```
+chess_mcq/
+├── app/
+│   ├── login/          # Login page
+│   ├── signup/         # Signup page
+│   └── layout.tsx      # Root layout
+├── components/
+│   ├── chess/          # Chess components
+│   │   ├── ChessBoard.tsx
+│   │   ├── ChessEngine.tsx
+│   │   └── ChessRules.tsx
+│   └── ui/             # shadcn/ui components
+├── hooks/
+│   └── useChessGame.ts # Chess game state hook
+├── lib/
+│   ├── supabase/       # Supabase client
+│   └── utils.ts        # Utility functions
+└── public/             # Static assets
+```
+
+## Design System Guidelines
+
+When adding new components or features:
+
+1. **Use shadcn/ui components** for UI elements (Button, Card, Input, etc.)
+2. **Use Tailwind CSS** for styling
+3. **Follow the existing design patterns** in login/signup pages
+4. **Maintain consistency** with the design system across all pages
+5. **Ensure responsive design** for mobile and desktop
+
+## Environment Variables
+
+- `NEXT_PUBLIC_SUPABASE_URL`: Your Supabase project URL
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Your Supabase anonymous key
+
+## License
+
+MIT
