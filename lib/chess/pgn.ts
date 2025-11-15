@@ -305,7 +305,7 @@ export function serializePgn(
   const headers: Array<[string, string]> = [
     ['Event', metadata.event ?? metadata.title ?? '?'],
     ['Site', metadata.site ?? '?'],
-    ['Date', formatDate(metadata.date)],
+    ['Date', formatDate(metadata.date ?? undefined)],
     ['Round', metadata.round ?? '?'],
     ['White', metadata.white ?? '?'],
     ['Black', metadata.black ?? '?'],
