@@ -11,6 +11,27 @@ import {
   createInitialTree,
 } from '@/lib/chess/variationTree'
 
+type ParsedMove = {
+  moveNumber?: number | null
+  notation?: {
+    notation?: string | null
+  } | null
+  variations?: ParsedMove[][] | null
+  nag?: string | null
+  comment?: string | null
+  commentAfter?: string | null
+  commentBefore?: string | null
+  commentDiag?: {
+    comment?: string | null
+  } | null
+  turn?: 'w' | 'b' | null
+}
+
+type ParsedGameNode = {
+  tags?: Record<string, unknown>
+  moves: ParsedMove[]
+}
+
 interface ParsedGame {
   tree: VariationTree
   metadata: GameMetadata
@@ -23,7 +44,7 @@ function parseNag(nag: string | null | undefined): number | undefined {
   return Number.isFinite(value) ? value : undefined
 }
 
-function extractComment(move: any): string | undefined {
+function extractComment(move: ParsedMove): string | undefined {
   if (typeof move?.commentAfter === 'string' && move.commentAfter.trim()) {
     return move.commentAfter.trim()
   }
@@ -42,7 +63,7 @@ function extractComment(move: any): string | undefined {
   return undefined
 }
 
-function toVariationMove(move: any): VariationMoveInput {
+function toVariationMove(move: ParsedMove): VariationMoveInput {
   return {
     san: move?.notation?.notation ?? null,
     comment: extractComment(move),
@@ -56,7 +77,7 @@ function toVariationMove(move: any): VariationMoveInput {
 function buildTreeFromMoves(
   tree: VariationTree,
   parentId: string,
-  moves: any[],
+  moves: ParsedMove[],
   asMainline: boolean
 ): VariationTree {
   let currentTree = tree
@@ -68,7 +89,7 @@ function buildTreeFromMoves(
       currentTree,
       currentParentId,
       [moveInput],
-      asMainline && index === 0
+      asMainline || index > 0
     )
 
     currentTree = updatedTree
@@ -78,13 +99,27 @@ function buildTreeFromMoves(
     }
 
     if (Array.isArray(move?.variations)) {
-      move.variations.forEach((variation: any[]) => {
-        currentTree = buildTreeFromMoves(
-          currentTree,
-          targetNode.id,
-          variation,
-          false
-        )
+      move.variations.forEach((variation) => {
+        const variationParentId = targetNode.parentId ?? tree.root.id
+        try {
+          currentTree = buildTreeFromMoves(
+            currentTree,
+            variationParentId,
+            variation,
+            false
+          )
+        } catch (error) {
+          if (error instanceof Error && error.message.startsWith('Invalid move')) {
+            currentTree = buildTreeFromMoves(
+              currentTree,
+              targetNode.id,
+              variation,
+              false
+            )
+          } else {
+            throw error
+          }
+        }
       })
     }
 
@@ -94,9 +129,36 @@ function buildTreeFromMoves(
   return currentTree
 }
 
-function buildMetadata(tags: Record<string, string | undefined>): GameMetadata {
-  const filteredTags = { ...tags }
-  delete (filteredTags as any).messages
+function normalizeTagValue(value: unknown): string | undefined {
+  if (value === undefined || value === null) {
+    return undefined
+  }
+  if (typeof value === 'string') {
+    return value
+  }
+  if (typeof value === 'object' && 'value' in (value as Record<string, unknown>)) {
+    const nestedValue = (value as Record<string, unknown>).value
+    if (typeof nestedValue === 'string') {
+      return nestedValue
+    }
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value)
+  }
+  return undefined
+}
+
+function buildMetadata(tags: Record<string, unknown>): GameMetadata {
+  const filteredTags: Record<string, string | undefined> = {}
+  Object.entries(tags ?? {}).forEach(([key, rawValue]) => {
+    if (key === 'messages') {
+      return
+    }
+    const normalized = normalizeTagValue(rawValue)
+    if (normalized !== undefined) {
+      filteredTags[key] = normalized
+    }
+  })
 
   return {
     title: filteredTags.Event,
@@ -123,9 +185,11 @@ export function parsePgn(pgn: string): ParsedGame {
     throw new Error('PGN text is empty.')
   }
 
-  let parsed
+  let parsed: ParsedGameNode | ParsedGameNode[]
   try {
-    parsed = parse(pgn, { startRule: 'game', sloppy: true })
+    parsed = parse(pgn, { startRule: 'game', sloppy: true }) as
+      | ParsedGameNode
+      | ParsedGameNode[]
   } catch (error) {
     throw new Error(
       error instanceof Error ? error.message : 'Unable to parse PGN input.'
@@ -209,14 +273,23 @@ function serializeMoves(
       tokens.push(`{${current.comment}}`)
     }
 
-    current.children.slice(1).forEach((variation) => {
-      const variationText = serializeMoves(variation, true)
-      if (variationText) {
-        tokens.push(`(${variationText})`)
-      }
-    })
+      if (current.children.length > 0) {
+        const mainlineChild = current.children.find((child) => child.isMainline)
+        const variationChildren = current.children.filter(
+          (child) => child !== mainlineChild
+        )
 
-    current = current.children[0]
+        variationChildren.forEach((variation) => {
+          const variationText = serializeMoves(variation, true)
+          if (variationText) {
+            tokens.push(`(${variationText})`)
+          }
+        })
+
+        current = mainlineChild
+      } else {
+        current = undefined
+      }
     first = false
   }
 
@@ -232,7 +305,7 @@ export function serializePgn(
   const headers: Array<[string, string]> = [
     ['Event', metadata.event ?? metadata.title ?? '?'],
     ['Site', metadata.site ?? '?'],
-    ['Date', formatDate(metadata.date)],
+    ['Date', formatDate(metadata.date ?? undefined)],
     ['Round', metadata.round ?? '?'],
     ['White', metadata.white ?? '?'],
     ['Black', metadata.black ?? '?'],

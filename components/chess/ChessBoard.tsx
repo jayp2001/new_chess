@@ -1,71 +1,105 @@
 'use client'
 
+import type { CSSProperties } from 'react'
 import { Chessboard } from 'react-chessboard'
-import { useChessGame } from '@/hooks/useChessGame'
-import { Chess } from 'chess.js'
+import type { ChessboardOptions } from 'react-chessboard/dist/ChessboardProvider'
+import { cn } from '@/lib/utils'
 
-interface ChessBoardProps {
-  position?: string // FEN notation
-  onMove?: (from: string, to: string) => boolean | void
-  boardOrientation?: 'white' | 'black'
-  arePiecesDraggable?: boolean
-  customBoardStyle?: React.CSSProperties
-  customSquareStyles?: { [square: string]: React.CSSProperties }
-  showBoardNotation?: boolean
+type Square = `${'a' | 'b' | 'c' | 'd' | 'e' | 'f' | 'g' | 'h'}${1 | 2 | 3 | 4 | 5 | 6 | 7 | 8}`
+
+interface BoardMove {
+  from: Square
+  to: Square
+  promotion?: string
 }
 
+interface BoardArrow {
+  from: Square
+  to: Square
+  color?: string
+}
+
+interface ChessBoardProps {
+  fen: string
+  onMove?: (move: BoardMove) => boolean | void
+  boardOrientation?: 'white' | 'black'
+  arePiecesDraggable?: boolean
+  isInteractive?: boolean
+  customBoardStyle?: CSSProperties
+  customSquareStyles?: { [square: string]: CSSProperties }
+  showBoardNotation?: boolean
+  arrows?: BoardArrow[]
+  width?: number
+  className?: string
+}
+
+const DEFAULT_PROMOTION = 'q'
+const DEFAULT_WIDTH = 560
+
 export function ChessBoard({
-  position,
+  fen,
   onMove,
   boardOrientation = 'white',
   arePiecesDraggable = true,
+  isInteractive = true,
   customBoardStyle,
   customSquareStyles,
   showBoardNotation = true,
+  arrows = [],
+  width = DEFAULT_WIDTH,
+  className,
 }: ChessBoardProps) {
-  const { game, makeMove, resetGame, getPosition, isValidMove } = useChessGame(position)
-
-  const handlePieceDrop = (sourceSquare: string, targetSquare: string) => {
-    const move = {
-      from: sourceSquare,
-      to: targetSquare,
-      promotion: 'q', // Default to queen promotion
+  const handlePieceDrop: NonNullable<ChessboardOptions['onPieceDrop']> = ({
+    sourceSquare,
+    targetSquare,
+  }) => {
+    if (!isInteractive) {
+      return false
     }
 
-    try {
-      const gameCopy = new Chess(game.fen())
-      const result = gameCopy.move(move)
-
-      if (result) {
-        // If custom onMove handler is provided, use it
-        if (onMove) {
-          const moveResult = onMove(sourceSquare, targetSquare)
-          if (moveResult === false) {
-            return false // Prevent the move
-          }
-        }
-        makeMove(move)
-        return true
-      }
-      return false // Invalid move
-    } catch (error) {
-      return false // Invalid move
+    if (!targetSquare || sourceSquare === targetSquare) {
+      return false
     }
+
+    const moveResult = onMove?.({
+      from: sourceSquare as Square,
+      to: targetSquare as Square,
+      promotion: DEFAULT_PROMOTION,
+    })
+
+    if (moveResult === false) {
+      return false
+    }
+
+    return true
+  }
+
+  const arrowOptions: ChessboardOptions['arrows'] = arrows.map((arrow) => ({
+    startSquare: arrow.from,
+    endSquare: arrow.to,
+    color: arrow.color ?? 'rgba(250, 204, 21, 0.85)',
+  }))
+
+  const options: ChessboardOptions = {
+    id: 'analysis-board',
+    position: fen,
+    boardOrientation,
+    allowDragging: isInteractive && arePiecesDraggable,
+    showNotation: showBoardNotation,
+    boardStyle: {
+      ...(customBoardStyle ?? {}),
+      maxWidth: width,
+      width: '100%',
+      aspectRatio: '1 / 1',
+    },
+    squareStyles: customSquareStyles,
+    arrows: arrowOptions,
+    onPieceDrop: handlePieceDrop,
   }
 
   return (
-    <div className="w-full max-w-[600px] aspect-square mx-auto">
-      <Chessboard
-        position={game.fen()}
-        onPieceDrop={handlePieceDrop}
-        boardOrientation={boardOrientation}
-        arePiecesDraggable={arePiecesDraggable}
-        customBoardStyle={customBoardStyle}
-        customSquareStyles={customSquareStyles}
-        showBoardNotation={showBoardNotation}
-        boardWidth={600}
-      />
+    <div className={cn('relative mx-auto w-full', className)} style={{ maxWidth: width }}>
+      <Chessboard options={options} />
     </div>
   )
 }
-
